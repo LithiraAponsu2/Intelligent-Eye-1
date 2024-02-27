@@ -6,7 +6,7 @@ from ultralytics.utils.plotting import Annotator, colors
 from collections import defaultdict
 
 # file name
-file_name = 'IMG_1169-003'
+file_name = '5'
 
 # Initialize tracking history and CSV writer
 track_history = defaultdict(lambda: [])
@@ -22,7 +22,7 @@ model = YOLO("yolov8x-seg.pt")
 names = model.model.names
 
 # Define the region of interest
-roi = np.array([[492, 852], [559, 953], [1566, 866], [1317, 798]], np.int32)
+roi = np.array([[666, 896], [782, 979], [1441, 887], [1236, 834]], np.int32)
 roi_binary = np.zeros((1080, 1920, 3), dtype=np.uint8)  # Assuming 1080p video; adjust as necessary.
 cv2.fillPoly(roi_binary, [roi], color=(255, 255, 255))
 
