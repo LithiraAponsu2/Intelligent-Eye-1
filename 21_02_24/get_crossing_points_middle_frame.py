@@ -11,7 +11,7 @@ def get_mouse_coordinates(event, x, y, flags, param):
             param['proceed'] = True  # Signal to proceed with drawing
 
 # Open the video file
-video_path = "5.mp4"  # Replace with your video file path
+video_path = "4.mp4"  # Replace with your video file path
 cap = cv2.VideoCapture(video_path)
 
 if not cap.isOpened():
