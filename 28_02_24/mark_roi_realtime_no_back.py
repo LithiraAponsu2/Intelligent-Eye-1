@@ -17,9 +17,28 @@ def get_mouse_coordinates(event, x, y, flags, param):
         if len(param['coordinates']) == 4:
             param['proceed'] = True  # Signal to proceed with drawing after collecting 4 points
 
+# Calculate slope and y-intercept of line
+def calculate_line_equation(p1, p2):
+    if p2[0] - p1[0] == 0:
+        m = float('inf')
+    else:
+        m = (p2[1] - p1[1]) / (p2[0] - p1[0])
+    b = p1[1] - m * p1[0]
+    return m, b
+
+# Check if point is below the line
+def is_above_line(point, m, b):
+    # Check for vertical line
+    if m == float('inf'):
+        # For a vertical line, "above" could mean to the left or right of the line depending on context
+        return point[0] > p1[0]  # Assuming p1[0] is the x-coordinate of the vertical line
+    # For a non-vertical line, check if the point is above the line
+    # Note: "Above" in screen coordinates is actually less than the line's y-value at the point's x
+    return point[1] > m * point[0] + b
+
 # Initialize variables
-file_name = '4'
-save_directory = "xgb_frames"
+file_name = 'show'
+save_directory = "xgb_capt_2"
 if not os.path.exists(save_directory):
     os.makedirs(save_directory)
 
@@ -28,9 +47,6 @@ model = YOLO("yolov8x-seg.pt")
 names = model.model.names
 
 # Load your pre-trained model (adjust the path as necessary)
-# random_forest_model = joblib.load("random_forest_model.joblib")
-
-# Example of loading the model back into memory
 loaded_model = pickle.load(open("finalized_model_xg.sav", 'rb'))
 
 # Open the video file
@@ -76,6 +92,10 @@ roi_binary = np.zeros((1080, 1920, 3), dtype=np.uint8)  # Adjust the size if nec
 cv2.fillPoly(roi_binary, [roi], color=(255, 255, 255))
 area_of_roi = cv2.countNonZero(cv2.cvtColor(roi_binary, cv2.COLOR_BGR2GRAY))  # Calculate area of ROI
 
+# Calculate line equation from ROI points 1 and 2
+p1, p2 = roi[1], roi[2]
+m, b = calculate_line_equation(p1, p2)
+
 # Initialize tracking history
 track_history = defaultdict(lambda: [])
 
@@ -86,8 +106,7 @@ persons_on_bikes = set()
 while True:
     ret, im0 = cap.read()
     if not ret:
-        print("Video frame is empty or video processing has been successfully completed.")
-        break
+        break  # Exit loop if video frame is empty
 
     results = model.track(im0, persist=True)
     masks = results[0].masks.xy
@@ -101,7 +120,7 @@ while True:
     persons = []
     vehicles = []
 
-    # Identify all persons and bikes/motorcycles to find persons on bikes
+    # Identify all persons and bikes/motorcycles
     bike_vehicle_centers = []
     for mask, cls_num in zip(masks, cls_nums):
         if mask.size > 0 and names[cls_num] in ['bicycle', 'motorcycle']:
@@ -115,10 +134,9 @@ while True:
         center = np.mean(mask, axis=0)
 
         # Check if this person is on a bike
-        if names[cls_num] == 'person':
-            if any(np.linalg.norm(center - bike_center) < 100 for bike_center in bike_vehicle_centers):
-                persons_on_bikes.add(track_id)
-                continue  # Skip further processing for this person
+        if names[cls_num] == 'person' and any(np.linalg.norm(center - bike_center) < 100 for bike_center in bike_vehicle_centers):
+            persons_on_bikes.add(track_id)
+            continue  # Skip further processing for this person
 
         mask_binary = np.zeros_like(im0)
         cv2.fillPoly(mask_binary, [np.array(mask, dtype=np.int32)], color=(255, 255, 255))
@@ -135,17 +153,17 @@ while True:
             velocity = 0
         track_history[track_id].append(center)
 
-        if names[cls_num] in ['person'] and intersection_area > 0 and track_id not in persons_on_bikes:
+        if names[cls_num] == 'person' and intersection_area > 0 and track_id not in persons_on_bikes:
             persons.append((center, velocity, iou * 100))  # iou percentage
-        elif names[cls_num] in ['car', 'motorcycle', 'airplane', 'bus', 'train', 'truck'] and intersection_area > 0:
-            vehicles.append((center, velocity, iou * 100))  # iou percentage
-
+        elif names[cls_num] in ['car', 'motorcycle', 'bus', 'truck'] and intersection_area > 0:
+            max_point = max(mask, key=lambda x: (x[0], x[1]))
+            if not is_above_line(max_point, m, b):
+                vehicles.append((center, velocity, iou * 100))  # iou percentage
+        
         annotator.seg_bbox(mask=mask, mask_color=colors(track_id, True), track_label=f'{track_id},{names[cls_num]}={confidence}')
         cv2.polylines(im0, [roi], True, (0, 255, 0), 2)
 
-    # Prediction and frame saving logic (if needed) goes here
-    # (The rest of the first script's logic continues...)
-        # Save data to CSV for the maximum intersection person and vehicle
+    # Continue with prediction and frame saving logic here, now with the updated 'vehicles' list
     if persons and vehicles:
         max_person = max(persons, key=lambda item: item[2])
         max_vehicle = max(vehicles, key=lambda item: item[2])
